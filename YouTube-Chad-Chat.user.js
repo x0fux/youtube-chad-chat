@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.14.2
+// @version         0.15.0
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.14.2";
+  const YTCC_VERSION = "0.15.0";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -422,6 +422,7 @@
     autoLiveChat: true,
     clickToMention: true,
     trackHistory: false,
+    notifyOnMention: false,
     mentionRegex: ""
   };
 
@@ -1334,6 +1335,10 @@
           <span>Track history</span>
         </label>
         <tp-yt-paper-button class="ytcc-clear-all-history-btn">Clear All History</tp-yt-paper-button>
+        <label class="ytcc-setting-row">
+          <input type="checkbox" class="ytcc-setting-checkbox" data-setting="notifyOnMention" ${settings.notifyOnMention ? "checked" : ""}>
+          <span>Notify on mention</span>
+        </label>
         <label class="ytcc-setting-row ytcc-setting-row-text">
           <span>Match mention (regex)</span>
           <input type="text" class="ytcc-setting-text" data-setting="mentionRegex"
@@ -1354,9 +1359,20 @@
     document.body.appendChild(overlay);
 
     dialog.querySelectorAll(".ytcc-setting-checkbox").forEach((checkbox) => {
-      checkbox.addEventListener("change", () => {
+      checkbox.addEventListener("change", async () => {
+        const key = checkbox.dataset.setting;
+
+        // Enabling notifications requires permission first. The request
+        // is kicked off synchronously from this click so the browser
+        // still counts it as a user gesture; if permission isn't
+        // granted, the box is reverted and false is what gets saved.
+        if (key === "notifyOnMention" && checkbox.checked) {
+          const granted = await ytcc_ensureNotificationPermission();
+          if (!granted) checkbox.checked = false;
+        }
+
         ytcc_mutateSettings((settings) => {
-          settings[checkbox.dataset.setting] = checkbox.checked;
+          settings[key] = checkbox.checked;
         }).catch((e) => console.warn("YTCC: failed to save settings.", e));
       });
     });
@@ -1456,6 +1472,8 @@
             if (clickBox) clickBox.checked = mergedSettings.clickToMention;
             const historyBox = dialogForRefresh.querySelector('[data-setting="trackHistory"]');
             if (historyBox) historyBox.checked = mergedSettings.trackHistory;
+            const notifyBox = dialogForRefresh.querySelector('[data-setting="notifyOnMention"]');
+            if (notifyBox) notifyBox.checked = !!mergedSettings.notifyOnMention;
             const mentionBox = dialogForRefresh.querySelector('[data-setting="mentionRegex"]');
             if (mentionBox) mentionBox.value = mergedSettings.mentionRegex || "";
           }
@@ -1664,6 +1682,122 @@
     return regex;
   }
 
+  // ===== Mention Notifications ===============================
+  // Resolves to true if the Notifications API is usable and permission is
+  // (now) granted. Must be called synchronously from a user gesture (the
+  // settings checkbox) for the permission prompt to be allowed to show.
+  function ytcc_ensureNotificationPermission() {
+    if (typeof Notification === "undefined") {
+      console.warn("YTCC: the Notifications API isn't available in this browser.");
+      return Promise.resolve(false);
+    }
+    if (Notification.permission === "granted") return Promise.resolve(true);
+    if (Notification.permission === "denied") {
+      console.warn("YTCC: notification permission is blocked for this site; allow it in the browser's site settings.");
+      return Promise.resolve(false);
+    }
+    try {
+      // Older Safari only supports the callback form, so handle both.
+      return new Promise((resolve) => {
+        const maybePromise = Notification.requestPermission((result) => resolve(result === "granted"));
+        if (maybePromise && typeof maybePromise.then === "function") {
+          maybePromise.then((result) => resolve(result === "granted"), () => resolve(false));
+        }
+      });
+    } catch (e) {
+      console.warn("YTCC: failed to request notification permission.", e);
+      return Promise.resolve(false);
+    }
+  }
+
+  // The chat usually lives in an iframe, where document.hasFocus() is
+  // false whenever the user clicks the video instead, even though the tab
+  // itself is focused. The top document reports true for any focused
+  // descendant frame, so prefer that (same-origin on youtube.com), falling
+  // back to this frame if it's inaccessible.
+  function ytcc_isTabFocused() {
+    try {
+      return window.top.document.hasFocus();
+    } catch (e) {
+      return document.hasFocus();
+    }
+  }
+
+  // Plain-text rendering of a message: unlike innerText, keeps emoji
+  // (<img alt="...">) instead of dropping them.
+  function ytcc_getMessageText(el) {
+    let text = "";
+    el.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        text += child.nodeValue;
+      } else if (child.nodeName === "IMG") {
+        text += child.alt || child.getAttribute("aria-label") || "";
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        text += ytcc_getMessageText(child);
+      }
+    });
+    return text.trim();
+  }
+
+  // Finds the message again when its notification is clicked: normally
+  // the same node, but fall back to an id lookup in case it was re-rendered.
+  function ytcc_findMessageNode(node, id) {
+    if (node.isConnected) return node;
+    if (!id) return null;
+    const all = document.querySelectorAll("yt-live-chat-text-message-renderer");
+    for (const candidate of all) {
+      if (candidate.id === id) return candidate;
+    }
+    return null;
+  }
+
+  // A message is only ever notified about once, even if it contains
+  // several mentions (or its node is somehow processed again).
+  const ytcc_notifiedNodes = new WeakSet();
+
+  function ytcc_notifyIfMention(node) {
+    if (!node || node.nodeName !== "YT-LIVE-CHAT-TEXT-MESSAGE-RENDERER") return;
+    if (ytcc_notifiedNodes.has(node)) return;
+
+    const data = ytcc_nodeDataMap.get(node);
+    if (!data || !data.message || !data.message.querySelector("span.mention")) return;
+    if (!ytcc_loadSettings().notifyOnMention) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (ytcc_isTabFocused()) return;
+
+    ytcc_notifiedNodes.add(node);
+
+    const id = node.id;
+    const options = { body: ytcc_getMessageText(data.message) };
+    if (id) options.tag = id;
+
+    let notification;
+    try {
+      notification = new Notification(data.author.innerText.trim(), options);
+    } catch (e) {
+      console.warn("YTCC: failed to show mention notification.", e);
+      return;
+    }
+
+    notification.onclick = (event) => {
+      try {
+        if (event && event.preventDefault) event.preventDefault();
+
+        // Bring the tab to the foreground, then focus the chat frame.
+        try { window.top.focus(); } catch (e) { /* cross-origin top */ }
+        window.focus();
+
+        const target = ytcc_findMessageNode(node, id);
+        if (target) target.scrollIntoView({ block: "center" });
+      } catch (e) {
+        console.warn("YTCC: failed to handle mention notification click.", e);
+      } finally {
+        notification.close();
+      }
+    };
+  }
+
+
   const ytcc_matchRules = [
     (data) => {
       const myHandle = ytcc_resolveCurrentUserHandle();
@@ -1747,7 +1881,12 @@
   function ytcc_mutationObserver(mutations, observer) {
     mutations.forEach(mutation => {
       if (mutation.type == "childList") {
-        mutation.addedNodes.forEach(ytcc_processNode);
+        mutation.addedNodes.forEach((added) => {
+          ytcc_processNode(added);
+          // Only live additions notify - the initial backlog scan below
+          // calls ytcc_processNode directly, so old messages never do.
+          ytcc_notifyIfMention(added);
+        });
         mutation.removedNodes.forEach(ytcc_unregisterNode);
       }
     });
