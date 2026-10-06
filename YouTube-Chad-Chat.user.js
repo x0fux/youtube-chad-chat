@@ -6,7 +6,7 @@
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
 // @homepage        https://github.com/x0fux/youtube-chad-chat
-// @icon            https://github.com/x0fux/youtube-chad-chat/raw/main/Icons/icon.png
+// @icon            https://github.com/x0fux/youtube-chad-chat/raw/main/icon.png
 // @updateURL       https://github.com/x0fux/youtube-chad-chat/raw/main/YouTube-Chad-Chat.user.js
 // @downloadURL     https://github.com/x0fux/youtube-chad-chat/raw/main/YouTube-Chad-Chat.user.js
 // @supportURL      https://github.com/x0fux/youtube-chad-chat/issues
