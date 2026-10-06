@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name            YouTube Chad Chat 0.14.2
+// @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
 // @version         0.14.2
 // @author          0fux
@@ -33,7 +33,7 @@
   // Mirrors the @version header above; kept as a plain constant (rather
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
-  // Bump this alongside @name/@version whenever the version changes.
+  // Bump this alongside @version whenever the version changes.
   const YTCC_VERSION = "0.14.2";
 
   // ===== Stylesheet ========================================
@@ -788,13 +788,13 @@
 
   function ytcc_participantHasOwnerBadge(participant) {
     const badges = participant &&
-      participant.liveChatParticipantRenderer &&
-      participant.liveChatParticipantRenderer.authorBadges;
+        participant.liveChatParticipantRenderer &&
+        participant.liveChatParticipantRenderer.authorBadges;
     if (!Array.isArray(badges)) return false;
     return badges.some((badge) => {
       const tooltip = badge &&
-        badge.liveChatAuthorBadgeRenderer &&
-        badge.liveChatAuthorBadgeRenderer.tooltip;
+          badge.liveChatAuthorBadgeRenderer &&
+          badge.liveChatAuthorBadgeRenderer.tooltip;
       return tooltip === "Owner";
     });
   }
@@ -813,17 +813,17 @@
     if (!data || typeof data !== "object") return null;
 
     const participants =
-      (data.contents &&
-        data.contents.liveChatRenderer &&
-        data.contents.liveChatRenderer.participantsList &&
-        data.contents.liveChatRenderer.participantsList.liveChatParticipantsListRenderer &&
-        data.contents.liveChatRenderer.participantsList.liveChatParticipantsListRenderer.participants) ||
-      (data.continuationContents &&
-        data.continuationContents.liveChatContinuation &&
-        data.continuationContents.liveChatContinuation.participantsList &&
-        data.continuationContents.liveChatContinuation.participantsList.liveChatParticipantsListRenderer &&
-        data.continuationContents.liveChatContinuation.participantsList.liveChatParticipantsListRenderer.participants) ||
-      null;
+        (data.contents &&
+            data.contents.liveChatRenderer &&
+            data.contents.liveChatRenderer.participantsList &&
+            data.contents.liveChatRenderer.participantsList.liveChatParticipantsListRenderer &&
+            data.contents.liveChatRenderer.participantsList.liveChatParticipantsListRenderer.participants) ||
+        (data.continuationContents &&
+            data.continuationContents.liveChatContinuation &&
+            data.continuationContents.liveChatContinuation.participantsList &&
+            data.continuationContents.liveChatContinuation.participantsList.liveChatParticipantsListRenderer &&
+            data.continuationContents.liveChatContinuation.participantsList.liveChatParticipantsListRenderer.participants) ||
+        null;
 
     if (!Array.isArray(participants) || participants.length === 0) return null;
 
@@ -840,9 +840,9 @@
     if (ytcc_currentChannelInfo) return ytcc_currentChannelInfo;
 
     const detected = ytcc_detectChannelFromSupportButton()
-      || ytcc_detectChannelFromInitialData()
-      || ytcc_detectChannelFromMetaTags()
-      || ytcc_detectChannelFromInlineData();
+        || ytcc_detectChannelFromInitialData()
+        || ytcc_detectChannelFromMetaTags()
+        || ytcc_detectChannelFromInlineData();
 
     if (detected) {
       ytcc_currentChannelInfo = detected;
@@ -976,8 +976,8 @@
 
       const currentText = ytcc_inputPlainText(box);
       const offset = currentText.length === 0
-        ? 0
-        : Math.max(0, Math.min(offsetAtClick == null ? currentText.length : offsetAtClick, currentText.length));
+          ? 0
+          : Math.max(0, Math.min(offsetAtClick == null ? currentText.length : offsetAtClick, currentText.length));
 
       ytcc_setCaretOffset(box, offset);
 
@@ -1174,7 +1174,7 @@
         mark[field] = ytcc_combineHex8(colorHex, alpha);
         marks[key] = mark;
       }).then(() => ytcc_updateAllNodesForKey(key))
-        .catch((e) => console.warn("YTCC: failed to save mark.", e));
+          .catch((e) => console.warn("YTCC: failed to save mark.", e));
     }
 
     function clearField(field, colorInput, alphaInput) {
@@ -1238,7 +1238,7 @@
 
     const history = ytcc_loadHistory();
     const entries = Object.entries(history[key] || {})
-      .sort((a, b) => new Date(b[1]) - new Date(a[1]));
+        .sort((a, b) => new Date(b[1]) - new Date(a[1]));
 
     const overlay = document.createElement("div");
     overlay.className = "ytcc-dialog-overlay";
@@ -1247,11 +1247,11 @@
     dialog.className = "ytcc-mark-dialog ytcc-history-dialog";
 
     const rowsHtml = entries.length
-      ? entries.map(([channel, iso]) => {
+        ? entries.map(([channel, iso]) => {
           const link = ytcc_getChannelHistoryLink(channel);
           const channelCell = link
-            ? `<a href="${ytcc_escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="ytcc-history-channel-link">${ytcc_escapeHtml(channel)}</a>`
-            : ytcc_escapeHtml(channel);
+              ? `<a href="${ytcc_escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="ytcc-history-channel-link">${ytcc_escapeHtml(channel)}</a>`
+              : ytcc_escapeHtml(channel);
           return `
           <tr>
             <td>${channelCell}</td>
@@ -1259,7 +1259,7 @@
           </tr>
         `;
         }).join("")
-      : `<tr><td colspan="2" class="ytcc-history-empty">No history recorded yet.</td></tr>`;
+        : `<tr><td colspan="2" class="ytcc-history-empty">No history recorded yet.</td></tr>`;
 
     dialog.innerHTML = `
       <div class="ytcc-dialog-header">
@@ -1290,8 +1290,8 @@
 
     dialog.querySelector(".ytcc-clear-history-btn").addEventListener("click", () => {
       ytcc_clearHistoryForKey(key)
-        .then(() => ytcc_openHistoryDialog(authorName, key))
-        .catch((e) => console.warn("YTCC: failed to clear history.", e));
+          .then(() => ytcc_openHistoryDialog(authorName, key))
+          .catch((e) => console.warn("YTCC: failed to clear history.", e));
     });
 
     overlay.addEventListener("click", (e) => {
