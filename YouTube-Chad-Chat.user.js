@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.15.0
+// @version         0.15.1
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.15.0";
+  const YTCC_VERSION = "0.15.1";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -259,6 +259,12 @@
     width: 16px;
     height: 16px;
     cursor: pointer;
+  }
+
+  .ytcc-setting-row-disabled,
+  .ytcc-setting-row-disabled input[type="checkbox"] {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .ytcc-setting-row-text {
@@ -1308,6 +1314,7 @@
     ytcc_closeContextMenu();
 
     const settings = ytcc_loadSettings();
+    const notifySupported = ytcc_isNotificationSupported();
     const myHandle = ytcc_resolveCurrentUserHandle();
     const mentionPlaceholder = myHandle ? `Defaults to ${myHandle}` : "Defaults to your handle";
 
@@ -1335,8 +1342,8 @@
           <span>Track history</span>
         </label>
         <tp-yt-paper-button class="ytcc-clear-all-history-btn">Clear All History</tp-yt-paper-button>
-        <label class="ytcc-setting-row">
-          <input type="checkbox" class="ytcc-setting-checkbox" data-setting="notifyOnMention" ${settings.notifyOnMention ? "checked" : ""}>
+        <label class="ytcc-setting-row${notifySupported ? "" : " ytcc-setting-row-disabled"}"${notifySupported ? "" : ' title="Notifications aren\'t supported in this browser"'}>
+          <input type="checkbox" class="ytcc-setting-checkbox" data-setting="notifyOnMention"${notifySupported && settings.notifyOnMention ? " checked" : ""}${notifySupported ? "" : " disabled"}>
           <span>Notify on mention</span>
         </label>
         <label class="ytcc-setting-row ytcc-setting-row-text">
@@ -1457,6 +1464,7 @@
         if (parsed.settings && typeof parsed.settings === "object") {
           tasks.push(ytcc_withLock("ytcc-settings", async () => {
             mergedSettings = Object.assign({}, YTCC_DEFAULT_SETTINGS, parsed.settings);
+            if (!ytcc_isNotificationSupported()) mergedSettings.notifyOnMention = false;
             ytcc_saveSettings(mergedSettings);
           }));
         }
@@ -1683,6 +1691,10 @@
   }
 
   // ===== Mention Notifications ===============================
+  function ytcc_isNotificationSupported() {
+    return typeof Notification !== "undefined";
+  }
+
   // Resolves to true if the Notifications API is usable and permission is
   // (now) granted. Must be called synchronously from a user gesture (the
   // settings checkbox) for the permission prompt to be allowed to show.
@@ -1909,6 +1921,26 @@
   // ===== ENTRY POINT =======================================
 
   const ytcc_settings = ytcc_loadSettings();
+
+  // Notifications: without API support the setting is forced off; with
+  // support, an enabled setting has its permission re-verified (and
+  // re-requested if it's no longer granted).
+  if (!ytcc_isNotificationSupported()) {
+    if (ytcc_settings.notifyOnMention) {
+      ytcc_mutateSettings((settings) => {
+        settings.notifyOnMention = false;
+      }).catch((e) => console.warn("YTCC: failed to save settings.", e));
+    }
+  } else if (ytcc_settings.notifyOnMention && Notification.permission !== "granted") {
+    ytcc_ensureNotificationPermission().then(() => {
+      // Only an explicit block turns the setting off. An unanswered or
+      // dismissed prompt leaves it on, so it is asked again next load.
+      if (Notification.permission !== "denied") return;
+      return ytcc_mutateSettings((settings) => {
+        settings.notifyOnMention = false;
+      });
+    }).catch((e) => console.warn("YTCC: failed to update notification setting.", e));
+  }
 
   // Switch to Live Chat (only when "Auto-Live Chat" is enabled)
   if (ytcc_settings.autoLiveChat) {
