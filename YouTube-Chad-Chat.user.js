@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.15.1
+// @version         0.15.2
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.15.1";
+  const YTCC_VERSION = "0.15.2";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -1329,32 +1329,32 @@
         <button type="button" class="ytcc-dialog-close" aria-label="Close">\u2715</button>
       </div>
       <div class="ytcc-dialog-body">
-        <label class="ytcc-setting-row">
+        <label class="ytcc-setting-row" title="Automatically switch from Top chat to Live chat on load">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="autoLiveChat" ${settings.autoLiveChat ? "checked" : ""}>
-          <span>Auto-Live Chat</span>
+          <span>Auto-Live chat</span>
         </label>
-        <label class="ytcc-setting-row">
+        <label class="ytcc-setting-row" title="Mention other chatters by left-clicking on their user handles">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="clickToMention" ${settings.clickToMention ? "checked" : ""}>
           <span>Click-to-mention</span>
         </label>
-        <label class="ytcc-setting-row">
+        <label class="ytcc-setting-row" title="Keep track of each chatter's most recent chats on each channel">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="trackHistory" ${settings.trackHistory ? "checked" : ""}>
           <span>Track history</span>
         </label>
-        <tp-yt-paper-button class="ytcc-clear-all-history-btn">Clear All History</tp-yt-paper-button>
-        <label class="ytcc-setting-row${notifySupported ? "" : " ytcc-setting-row-disabled"}"${notifySupported ? "" : ' title="Notifications aren\'t supported in this browser"'}>
+        <tp-yt-paper-button class="ytcc-clear-all-history-btn" title="Clear the entire chatter history">Clear All History</tp-yt-paper-button>
+        <label class="ytcc-setting-row${notifySupported ? "" : " ytcc-setting-row-disabled"}" title="${notifySupported ? "Send a notification when mentioned in chat" : "Notifications aren't supported in this browser"}">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="notifyOnMention"${notifySupported && settings.notifyOnMention ? " checked" : ""}${notifySupported ? "" : " disabled"}>
           <span>Notify on mention</span>
         </label>
-        <label class="ytcc-setting-row ytcc-setting-row-text">
+        <label class="ytcc-setting-row ytcc-setting-row-text" title="Custom regex for highlighting mentions in chat (empty is YouTube default)">
           <span>Match mention (regex)</span>
           <input type="text" class="ytcc-setting-text" data-setting="mentionRegex"
                  value="${ytcc_escapeHtml(settings.mentionRegex || "")}"
                  placeholder="${ytcc_escapeHtml(mentionPlaceholder)}">
         </label>
         <div class="ytcc-settings-actions">
-          <tp-yt-paper-button class="ytcc-import-btn">Import settings</tp-yt-paper-button>
-          <tp-yt-paper-button class="ytcc-export-btn">Export settings</tp-yt-paper-button>
+          <tp-yt-paper-button class="ytcc-import-btn" title="Import Chad Chat settings file">Import settings</tp-yt-paper-button>
+          <tp-yt-paper-button class="ytcc-export-btn" title="Export Chad Chat settings file">Export settings</tp-yt-paper-button>
         </div>
       </div>
       <div class="ytcc-dialog-footer">
@@ -1942,7 +1942,7 @@
     }).catch((e) => console.warn("YTCC: failed to update notification setting.", e));
   }
 
-  // Switch to Live Chat (only when "Auto-Live Chat" is enabled)
+  // Switch to Live Chat (only when "Auto-Live chat" is enabled)
   if (ytcc_settings.autoLiveChat) {
     document.querySelectorAll("tp-yt-paper-listbox tp-yt-paper-item")?.[1]?.click?.();
   }
