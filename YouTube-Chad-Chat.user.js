@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.15.2
+// @version         0.16.0
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.15.2";
+  const YTCC_VERSION = "0.16.0";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -427,6 +427,7 @@
   const YTCC_DEFAULT_SETTINGS = {
     autoLiveChat: true,
     clickToMention: true,
+    spamSend: true,
     trackHistory: false,
     notifyOnMention: false,
     mentionRegex: ""
@@ -1337,6 +1338,10 @@
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="clickToMention" ${settings.clickToMention ? "checked" : ""}>
           <span>Click-to-mention</span>
         </label>
+        <label class="ytcc-setting-row" title="Hold ${ytcc_isMac() ? "Option" : "Alt"} key to save chat when sending">
+          <input type="checkbox" class="ytcc-setting-checkbox" data-setting="spamSend" ${settings.spamSend ? "checked" : ""}>
+          <span>Spam send</span>
+        </label>
         <label class="ytcc-setting-row" title="Keep track of each chatter's most recent chats on each channel">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="trackHistory" ${settings.trackHistory ? "checked" : ""}>
           <span>Track history</span>
@@ -1478,6 +1483,8 @@
             if (autoBox) autoBox.checked = mergedSettings.autoLiveChat;
             const clickBox = dialogForRefresh.querySelector('[data-setting="clickToMention"]');
             if (clickBox) clickBox.checked = mergedSettings.clickToMention;
+            const spamBox = dialogForRefresh.querySelector('[data-setting="spamSend"]');
+            if (spamBox) spamBox.checked = mergedSettings.spamSend;
             const historyBox = dialogForRefresh.querySelector('[data-setting="trackHistory"]');
             if (historyBox) historyBox.checked = mergedSettings.trackHistory;
             const notifyBox = dialogForRefresh.querySelector('[data-setting="notifyOnMention"]');
@@ -1919,6 +1926,80 @@
 
 
   // ===== ENTRY POINT =======================================
+
+  // ===== Spam send =============================================
+  // Holding Option (Mac) / Alt (elsewhere) while sending a chat - via
+  // Enter or the send button - keeps the text in the input box. YouTube
+  // clears the box itself on send, so the contents are snapshotted just
+  // before that happens (capture-phase listeners run first) and put back
+  // as soon as the box is seen to have been emptied.
+  function ytcc_isMac() {
+    const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+    return /mac/i.test(platform);
+  }
+
+  let ytcc_pendingRestore = null;
+
+  function ytcc_cancelPendingRestore() {
+    if (!ytcc_pendingRestore) return;
+    ytcc_pendingRestore.observer.disconnect();
+    clearTimeout(ytcc_pendingRestore.timer);
+    ytcc_pendingRestore = null;
+  }
+
+  function ytcc_inputBoxIsEmpty(box) {
+    return !ytcc_inputPlainText(box).trim() && !box.querySelector("img");
+  }
+
+  function ytcc_preserveInputOnSend() {
+    if (!ytcc_loadSettings().spamSend) return;
+    const box = ytcc_getInputBox();
+    if (!box || ytcc_inputBoxIsEmpty(box)) return;
+
+    ytcc_cancelPendingRestore();
+    const savedHtml = box.innerHTML;
+
+    const restore = () => {
+      ytcc_cancelPendingRestore();
+      // Skip if something has already been typed since the send.
+      if (!ytcc_inputBoxIsEmpty(box)) return;
+      box.innerHTML = savedHtml;
+      box.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      if (document.activeElement === box) {
+        const range = document.createRange();
+        range.selectNodeContents(box);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    };
+
+    const observer = new MutationObserver(() => {
+      if (!ytcc_inputBoxIsEmpty(box)) return;
+      observer.disconnect();
+      setTimeout(restore, 0);
+    });
+    observer.observe(box, { childList: true, characterData: true, subtree: true });
+
+    // If the send never clears the box (e.g. it was rejected), give up.
+    ytcc_pendingRestore = {
+      observer,
+      timer: setTimeout(ytcc_cancelPendingRestore, 2000)
+    };
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !e.altKey || e.shiftKey || e.isComposing) return;
+    const box = ytcc_getInputBox();
+    if (!box || !box.contains(e.target)) return;
+    ytcc_preserveInputOnSend();
+  }, true);
+
+  document.addEventListener("click", (e) => {
+    if (!e.altKey || !e.target.closest || !e.target.closest("#send-button")) return;
+    ytcc_preserveInputOnSend();
+  }, true);
 
   const ytcc_settings = ytcc_loadSettings();
 
