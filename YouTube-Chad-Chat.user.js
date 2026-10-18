@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.16.0
+// @version         0.17.0
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.16.0";
+  const YTCC_VERSION = "0.17.0";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -1346,7 +1346,11 @@
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="trackHistory" ${settings.trackHistory ? "checked" : ""}>
           <span>Track history</span>
         </label>
-        <tp-yt-paper-button class="ytcc-clear-all-history-btn" title="Clear the entire chatter history">Clear All History</tp-yt-paper-button>
+        <div class="ytcc-settings-actions">
+          <tp-yt-paper-button class="ytcc-import-history-btn" title="Import Chad Chat history file">Import history</tp-yt-paper-button>
+          <tp-yt-paper-button class="ytcc-export-history-btn" title="Export Chad Chat history file">Export history</tp-yt-paper-button>
+          <tp-yt-paper-button class="ytcc-clear-history-btn" title="Clear the entire chatter history">Clear history</tp-yt-paper-button>
+        </div>
         <label class="ytcc-setting-row${notifySupported ? "" : " ytcc-setting-row-disabled"}" title="${notifySupported ? "Send a notification when mentioned in chat" : "Notifications aren't supported in this browser"}">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="notifyOnMention"${notifySupported && settings.notifyOnMention ? " checked" : ""}${notifySupported ? "" : " disabled"}>
           <span>Notify on mention</span>
@@ -1397,9 +1401,11 @@
       });
     });
 
-    dialog.querySelector(".ytcc-clear-all-history-btn").addEventListener("click", () => {
+    dialog.querySelector(".ytcc-clear-history-btn").addEventListener("click", () => {
       ytcc_clearAllHistory().catch((e) => console.warn("YTCC: failed to clear all history.", e));
     });
+    dialog.querySelector(".ytcc-export-history-btn").addEventListener("click", ytcc_exportHistory);
+    dialog.querySelector(".ytcc-import-history-btn").addEventListener("click", ytcc_importHistory);
 
     dialog.querySelector(".ytcc-dialog-close").addEventListener("click", ytcc_closeDialog);
     dialog.querySelector(".ytcc-export-btn").addEventListener("click", ytcc_exportSettings);
@@ -1412,25 +1418,23 @@
     ytcc_activeDialog = overlay;
   }
 
-  function ytcc_exportSettings() {
-    const data = {
-      marks: ytcc_loadMarks(),
-      settings: ytcc_loadSettings(),
-      history: ytcc_loadHistory()
-    };
+  // Downloads `data` as a timestamped JSON file named `<prefix>-<stamp>.json`.
+  function ytcc_downloadJson(data, prefix) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const a = document.createElement("a");
     a.href = url;
-    a.download = `chad-chat-settings-${stamp}.json`;
+    a.download = `${prefix}-${stamp}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   }
 
-  function ytcc_importSettings(dialogForRefresh) {
+  // Opens a file picker for a JSON file and calls onParsed(parsedObject)
+  // once it has been read and parsed. `label` is only used in warnings.
+  function ytcc_pickJsonFile(label, onParsed) {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json";
@@ -1447,61 +1451,90 @@
         try {
           parsed = JSON.parse(reader.result);
         } catch (e) {
-          console.warn("YTCC: failed to import settings file.", e);
+          console.warn(`YTCC: failed to import ${label} file.`, e);
           return;
         }
-
-        const tasks = [];
-
-        if (parsed.marks && typeof parsed.marks === "object") {
-          tasks.push(ytcc_withLock("ytcc-marks", async () => {
-            ytcc_saveMarks(parsed.marks);
-          }));
-        }
-
-        if (parsed.history && typeof parsed.history === "object") {
-          tasks.push(ytcc_withLock("ytcc-history", async () => {
-            ytcc_saveHistory(parsed.history);
-          }));
-        }
-
-        let mergedSettings = null;
-        if (parsed.settings && typeof parsed.settings === "object") {
-          tasks.push(ytcc_withLock("ytcc-settings", async () => {
-            mergedSettings = Object.assign({}, YTCC_DEFAULT_SETTINGS, parsed.settings);
-            if (!ytcc_isNotificationSupported()) mergedSettings.notifyOnMention = false;
-            ytcc_saveSettings(mergedSettings);
-          }));
-        }
-
-        Promise.all(tasks).then(() => {
-          if (parsed.marks && typeof parsed.marks === "object") {
-            ytcc_reapplyAllMarks();
-          }
-          if (mergedSettings && dialogForRefresh) {
-            const autoBox = dialogForRefresh.querySelector('[data-setting="autoLiveChat"]');
-            if (autoBox) autoBox.checked = mergedSettings.autoLiveChat;
-            const clickBox = dialogForRefresh.querySelector('[data-setting="clickToMention"]');
-            if (clickBox) clickBox.checked = mergedSettings.clickToMention;
-            const spamBox = dialogForRefresh.querySelector('[data-setting="spamSend"]');
-            if (spamBox) spamBox.checked = mergedSettings.spamSend;
-            const historyBox = dialogForRefresh.querySelector('[data-setting="trackHistory"]');
-            if (historyBox) historyBox.checked = mergedSettings.trackHistory;
-            const notifyBox = dialogForRefresh.querySelector('[data-setting="notifyOnMention"]');
-            if (notifyBox) notifyBox.checked = !!mergedSettings.notifyOnMention;
-            const mentionBox = dialogForRefresh.querySelector('[data-setting="mentionRegex"]');
-            if (mentionBox) mentionBox.value = mergedSettings.mentionRegex || "";
-          }
-          console.log("YTCC: settings imported successfully.");
-        }).catch((e) => {
-          console.warn("YTCC: failed to import settings file.", e);
-        });
+        onParsed(parsed);
       };
       reader.readAsText(file);
     });
 
     document.body.appendChild(input);
     input.click();
+  }
+
+  // Settings files hold marks + settings only; history has its own file.
+  function ytcc_exportSettings() {
+    ytcc_downloadJson({
+      marks: ytcc_loadMarks(),
+      settings: ytcc_loadSettings()
+    }, "chad-chat-settings");
+  }
+
+  function ytcc_importSettings(dialogForRefresh) {
+    ytcc_pickJsonFile("settings", (parsed) => {
+      const tasks = [];
+
+      if (parsed.marks && typeof parsed.marks === "object") {
+        tasks.push(ytcc_withLock("ytcc-marks", async () => {
+          ytcc_saveMarks(parsed.marks);
+        }));
+      }
+
+      let mergedSettings = null;
+      if (parsed.settings && typeof parsed.settings === "object") {
+        tasks.push(ytcc_withLock("ytcc-settings", async () => {
+          mergedSettings = Object.assign({}, YTCC_DEFAULT_SETTINGS, parsed.settings);
+          if (!ytcc_isNotificationSupported()) mergedSettings.notifyOnMention = false;
+          ytcc_saveSettings(mergedSettings);
+        }));
+      }
+
+      Promise.all(tasks).then(() => {
+        if (parsed.marks && typeof parsed.marks === "object") {
+          ytcc_reapplyAllMarks();
+        }
+        if (mergedSettings && dialogForRefresh) {
+          const autoBox = dialogForRefresh.querySelector('[data-setting="autoLiveChat"]');
+          if (autoBox) autoBox.checked = mergedSettings.autoLiveChat;
+          const clickBox = dialogForRefresh.querySelector('[data-setting="clickToMention"]');
+          if (clickBox) clickBox.checked = mergedSettings.clickToMention;
+          const spamBox = dialogForRefresh.querySelector('[data-setting="spamSend"]');
+          if (spamBox) spamBox.checked = mergedSettings.spamSend;
+          const historyBox = dialogForRefresh.querySelector('[data-setting="trackHistory"]');
+          if (historyBox) historyBox.checked = mergedSettings.trackHistory;
+          const notifyBox = dialogForRefresh.querySelector('[data-setting="notifyOnMention"]');
+          if (notifyBox) notifyBox.checked = !!mergedSettings.notifyOnMention;
+          const mentionBox = dialogForRefresh.querySelector('[data-setting="mentionRegex"]');
+          if (mentionBox) mentionBox.value = mergedSettings.mentionRegex || "";
+        }
+        console.log("YTCC: settings imported successfully.");
+      }).catch((e) => {
+        console.warn("YTCC: failed to import settings file.", e);
+      });
+    });
+  }
+
+  // History files are `{ "history": { [authorKey]: { [channel]: isoTimestamp } } }`.
+  // Importing replaces the stored history.
+  function ytcc_exportHistory() {
+    ytcc_downloadJson({ history: ytcc_loadHistory() }, "chad-chat-history");
+  }
+
+  function ytcc_importHistory() {
+    ytcc_pickJsonFile("history", (parsed) => {
+      if (!parsed || !parsed.history || typeof parsed.history !== "object" || Array.isArray(parsed.history)) {
+        console.warn("YTCC: failed to import history file: no history found in it.");
+        return;
+      }
+      ytcc_withLock("ytcc-history", async () => {
+        ytcc_saveHistory(parsed.history);
+      }).then(() => {
+        console.log("YTCC: history imported successfully.");
+      }).catch((e) => {
+        console.warn("YTCC: failed to import history file.", e);
+      });
+    });
   }
 
 
