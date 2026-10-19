@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.17.0
+// @version         0.18.0
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.17.0";
+  const YTCC_VERSION = "0.18.0";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -42,9 +42,27 @@
     --ytcc-mention-rgb: 244, 100, 52;
     --ytcc-mention-color: rgba(var(--ytcc-mention-rgb), 1.0);
     --ytcc-mention-bg-color: rgba(var(--ytcc-mention-rgb), 0.25);
+
+    /* Dialog colors follow YouTube's own theme variables; the literal
+       values are only fallbacks (light by default, dark under html[dark]). */
+    --ytcc-text: var(--yt-spec-text-primary, #0f0f0f);
+    --ytcc-text-secondary: var(--yt-spec-text-secondary, #606060);
+    --ytcc-border: var(--yt-spec-10-percent-layer, rgba(0, 0, 0, 0.1));
+    --ytcc-input-bg: var(--yt-spec-base-background, #ffffff);
+    --ytcc-stripe: rgba(128, 128, 128, 0.08);
   }
 
-  yt-live-chat-text-message-renderer {
+  html[dark] {
+    --ytcc-text: var(--yt-spec-text-primary, #ffffff);
+    --ytcc-text-secondary: var(--yt-spec-text-secondary, #aaaaaa);
+    --ytcc-border: var(--yt-spec-10-percent-layer, rgba(255, 255, 255, 0.1));
+    --ytcc-input-bg: var(--yt-spec-base-background, #121212);
+  }
+
+  /* The "Alternate rows" setting toggles .ytcc-alt-rows on <html>. :where()
+     keeps these rules at their original specificity so .ytcc-me below
+     still overrides the alternate background. */
+  :where(.ytcc-alt-rows) yt-live-chat-text-message-renderer {
     border-bottom: 1px solid #60606040;
   }
 
@@ -52,7 +70,7 @@
     cursor: pointer;
   }
 
-  .ytcc-alt {
+  :where(.ytcc-alt-rows) .ytcc-alt {
     background-color: #80808020;
   }
 
@@ -143,7 +161,7 @@
 
   .ytcc-mark-dialog {
     background: var(--yt-live-chat-background-color, #212121);
-    color: #fff;
+    color: var(--ytcc-text);
     border-radius: 12px;
     min-width: 280px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.6);
@@ -156,7 +174,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid #3f3f3f;
+    border-bottom: 1px solid var(--ytcc-border);
     gap: 12px;
   }
 
@@ -172,14 +190,14 @@
   .ytcc-dialog-version {
     font-size: 0.7em;
     font-weight: 400;
-    color: #aaaaaa;
+    color: var(--ytcc-text-secondary);
     margin-left: 6px;
   }
 
   .ytcc-dialog-close, .ytcc-color-clear {
     background: none;
     border: none;
-    color: #aaaaaa;
+    color: var(--ytcc-text-secondary);
     font-size: 14px;
     cursor: pointer;
     line-height: 1;
@@ -192,7 +210,7 @@
   }
 
   .ytcc-dialog-close:hover, .ytcc-color-clear:hover {
-    color: #ffffff;
+    color: var(--ytcc-text);
   }
 
   .ytcc-dialog-body {
@@ -236,7 +254,7 @@
     align-items: center;
     justify-content: flex-end;
     padding: 12px 16px;
-    border-top: 1px solid #3f3f3f;
+    border-top: 1px solid var(--ytcc-border);
     gap: 12px;
   }
 
@@ -275,9 +293,9 @@
   }
 
   .ytcc-setting-text {
-    background: #121212;
-    color: #fff;
-    border: 1px solid #3f3f3f;
+    background: var(--ytcc-input-bg);
+    color: var(--ytcc-text);
+    border: 1px solid var(--ytcc-border);
     border-radius: 4px;
     padding: 6px 8px;
     font-size: 13px;
@@ -303,7 +321,7 @@
   .ytcc-history-table-wrap {
     max-height: 260px;
     overflow-y: auto;
-    border: 1px solid #3f3f3f;
+    border: 1px solid var(--ytcc-border);
     border-radius: 6px;
   }
 
@@ -323,17 +341,17 @@
     position: sticky;
     top: 0;
     background: var(--yt-live-chat-background-color, #212121);
-    border-bottom: 1px solid #3f3f3f;
+    border-bottom: 1px solid var(--ytcc-border);
     font-weight: 500;
   }
 
   .ytcc-history-table tbody tr:nth-child(odd) {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--ytcc-stripe);
   }
 
   .ytcc-history-empty {
     text-align: center;
-    color: #aaaaaa;
+    color: var(--ytcc-text-secondary);
     padding: 16px 10px;
     white-space: normal;
   }
@@ -426,6 +444,7 @@
   const YTCC_SETTINGS_KEY = "ytcc_settings";
   const YTCC_DEFAULT_SETTINGS = {
     autoLiveChat: true,
+    alternateRows: true,
     clickToMention: true,
     spamSend: true,
     trackHistory: false,
@@ -1334,6 +1353,10 @@
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="autoLiveChat" ${settings.autoLiveChat ? "checked" : ""}>
           <span>Auto-Live chat</span>
         </label>
+        <label class="ytcc-setting-row" title="Highlight every other chat">
+          <input type="checkbox" class="ytcc-setting-checkbox" data-setting="alternateRows" ${settings.alternateRows ? "checked" : ""}>
+          <span>Alternate rows</span>
+        </label>
         <label class="ytcc-setting-row" title="Mention other chatters by left-clicking on their user handles">
           <input type="checkbox" class="ytcc-setting-checkbox" data-setting="clickToMention" ${settings.clickToMention ? "checked" : ""}>
           <span>Click-to-mention</span>
@@ -1386,6 +1409,8 @@
           const granted = await ytcc_ensureNotificationPermission();
           if (!granted) checkbox.checked = false;
         }
+
+        if (key === "alternateRows") ytcc_applyAlternateRows(checkbox.checked);
 
         ytcc_mutateSettings((settings) => {
           settings[key] = checkbox.checked;
@@ -1497,6 +1522,9 @@
         if (mergedSettings && dialogForRefresh) {
           const autoBox = dialogForRefresh.querySelector('[data-setting="autoLiveChat"]');
           if (autoBox) autoBox.checked = mergedSettings.autoLiveChat;
+          const altBox = dialogForRefresh.querySelector('[data-setting="alternateRows"]');
+          if (altBox) altBox.checked = mergedSettings.alternateRows;
+          ytcc_applyAlternateRows(mergedSettings.alternateRows);
           const clickBox = dialogForRefresh.querySelector('[data-setting="clickToMention"]');
           if (clickBox) clickBox.checked = mergedSettings.clickToMention;
           const spamBox = dialogForRefresh.querySelector('[data-setting="spamSend"]');
@@ -2034,7 +2062,14 @@
     ytcc_preserveInputOnSend();
   }, true);
 
+  // Toggles the class that enables the alternating-row background and
+  // row separators (see the stylesheet).
+  function ytcc_applyAlternateRows(enabled) {
+    document.documentElement.classList.toggle("ytcc-alt-rows", !!enabled);
+  }
+
   const ytcc_settings = ytcc_loadSettings();
+  ytcc_applyAlternateRows(ytcc_settings.alternateRows);
 
   // Notifications: without API support the setting is forced off; with
   // support, an enabled setting has its permission re-verified (and
