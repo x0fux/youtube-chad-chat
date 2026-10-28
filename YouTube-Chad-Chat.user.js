@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.18.0
+// @version         0.19.0
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.18.0";
+  const YTCC_VERSION = "0.19.0";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -141,6 +141,19 @@
     cursor: pointer;
     font-size: 14px;
     white-space: nowrap;
+  }
+
+  /* Small raised count pill after a menu label (e.g. History entries). */
+  .ytcc-menu-badge {
+    position: relative;
+    top: -0.45em;
+    margin-left: 6px;
+    padding: 0 6px;
+    font-size: 0.7em;
+    line-height: 1.6;
+    border-radius: 999px;
+    background: rgba(128, 128, 128, 0.25);
+    opacity: 0.8;
   }
 
   .ytcc-context-menu-item[disabled] {
@@ -307,6 +320,54 @@
   .ytcc-setting-text:focus {
     outline: none;
     border-color: #909090;
+  }
+
+  /* ----- Mark dialog: Author font combobox ----- */
+  .ytcc-font-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    gap: 12px;
+  }
+
+  .ytcc-font-row-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ytcc-font-combo {
+    position: relative;
+  }
+
+  .ytcc-font-combo .ytcc-setting-text {
+    width: 150px;
+  }
+
+  .ytcc-font-options {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 0;
+    right: 0;
+    z-index: 1;
+    max-height: 150px;
+    overflow-y: auto;
+    background: var(--yt-live-chat-background-color, #212121);
+    border: 1px solid var(--ytcc-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+
+  .ytcc-font-option {
+    padding: 6px 10px;
+    font-size: 14px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .ytcc-font-option:hover {
+    background: rgba(128, 128, 128, 0.2);
   }
 
   .ytcc-marked {
@@ -477,6 +538,7 @@
   //   authorHighlight  - a rounded "chip" background on #author-name,
   //                       matching the shape YouTube uses for #author-name.owner
   //   chatHighlight    - background color across the whole message row
+  //   authorFont       - CSS font-family value for #author-name
   const YTCC_MARKS_KEY = "ytcc_author_marks";
 
   function ytcc_loadMarks() {
@@ -555,11 +617,16 @@
       authorEl.style.padding = "";
       authorEl.style.display = "";
       authorEl.style.fontWeight = "";
+      authorEl.style.fontFamily = "";
     }
     node.style.backgroundColor = "";
     node.classList.remove("ytcc-marked");
 
     if (!mark) return;
+
+    if (mark.authorFont && authorEl) {
+      authorEl.style.fontFamily = mark.authorFont;
+    }
 
     if (mark.authorColor && authorEl) {
       authorEl.style.color = mark.authorColor;
@@ -1096,7 +1163,12 @@
 
     const historyItem = document.createElement("tp-yt-paper-item");
     historyItem.className = "ytcc-context-menu-item";
-    historyItem.innerText = "History\u2026";
+    historyItem.textContent = "History\u2026";
+    const historyCount = Object.keys(ytcc_loadHistory()[key] || {}).length;
+    const historyBadge = document.createElement("span");
+    historyBadge.className = "ytcc-menu-badge";
+    historyBadge.textContent = historyCount;
+    historyItem.appendChild(historyBadge);
     historyItem.addEventListener("click", () => {
       ytcc_closeContextMenu();
       ytcc_openHistoryDialog(authorName, key);
@@ -1147,6 +1219,12 @@
     { field: "chatHighlight", label: "Chat highlight", defaultValue: "#00000000" }
   ];
 
+  // Generic CSS font families offered by the "Author font" combobox.
+  const YTCC_GENERIC_FONTS = [
+    "sans-serif", "serif", "monospace", "cursive", "fantasy",
+    "system-ui", "ui-sans-serif", "ui-serif", "ui-monospace", "ui-rounded"
+  ];
+
   function ytcc_openMarkDialog(authorName, key) {
     ytcc_closeDialog();
 
@@ -1183,6 +1261,17 @@
         <button type="button" class="ytcc-dialog-close" aria-label="Close">\u2715</button>
       </div>
       <div class="ytcc-dialog-body">
+        <div class="ytcc-font-row">
+          <span>Author font</span>
+          <div class="ytcc-font-row-controls">
+            <div class="ytcc-font-combo">
+              <input type="text" class="ytcc-setting-text ytcc-mark-font" placeholder="Default"
+                     autocomplete="off" spellcheck="false">
+              <div class="ytcc-font-options" hidden></div>
+            </div>
+            <button type="button" class="ytcc-color-clear ytcc-font-clear" aria-label="Clear Author font">\u2715</button>
+          </div>
+        </div>
         ${rowsHtml}
       </div>
       <div class="ytcc-dialog-footer">
@@ -1218,6 +1307,68 @@
       }).catch((e) => console.warn("YTCC: failed to clear mark.", e));
     }
 
+    // ----- Author font combobox -----
+    // A free-text CSS font-family input plus a filtered suggestion list of
+    // the generic families, each previewed in its own font. Set via .value
+    // (not the HTML template) since font values commonly contain quotes.
+    const fontInput = dialog.querySelector(".ytcc-mark-font");
+    const fontOptions = dialog.querySelector(".ytcc-font-options");
+    fontInput.value = existing.authorFont || "";
+
+    function persistFont(value) {
+      const font = value.trim();
+      ytcc_mutateMarks((marks) => {
+        const mark = marks[key] || {};
+        if (font) {
+          mark.authorFont = font;
+          marks[key] = mark;
+        } else {
+          delete mark.authorFont;
+          if (Object.keys(mark).length === 0) delete marks[key];
+          else marks[key] = mark;
+        }
+      }).then(() => ytcc_updateAllNodesForKey(key))
+          .catch((e) => console.warn("YTCC: failed to save mark.", e));
+    }
+
+    function renderFontOptions(filter) {
+      const needle = filter.trim().toLowerCase();
+      fontOptions.textContent = "";
+      YTCC_GENERIC_FONTS.filter((name) => name.includes(needle)).forEach((name) => {
+        const option = document.createElement("div");
+        option.className = "ytcc-font-option";
+        option.textContent = name;
+        option.style.fontFamily = name;
+        // Keep focus in the input so choosing doesn't blur-close the list.
+        option.addEventListener("mousedown", (e) => e.preventDefault());
+        option.addEventListener("click", () => {
+          fontInput.value = name;
+          fontOptions.hidden = true;
+          persistFont(name);
+        });
+        fontOptions.appendChild(option);
+      });
+      fontOptions.hidden = fontOptions.childElementCount === 0;
+    }
+
+    fontInput.addEventListener("focus", () => renderFontOptions(""));
+    fontInput.addEventListener("click", () => {
+      if (fontOptions.hidden) renderFontOptions("");
+    });
+    fontInput.addEventListener("input", () => {
+      renderFontOptions(fontInput.value);
+      persistFont(fontInput.value);
+    });
+    fontInput.addEventListener("blur", () => { fontOptions.hidden = true; });
+    fontInput.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") fontOptions.hidden = true;
+    });
+    dialog.querySelector(".ytcc-font-clear").addEventListener("click", () => {
+      fontInput.value = "";
+      fontOptions.hidden = true;
+      persistFont("");
+    });
+
     dialog.querySelectorAll(".ytcc-color-row").forEach((row) => {
       const colorInput = row.querySelector(".ytcc-mark-color");
       const alphaInput = row.querySelector(".ytcc-mark-alpha");
@@ -1239,6 +1390,8 @@
         delete marks[key];
       }).then(() => {
         ytcc_updateAllNodesForKey(key);
+        fontInput.value = "";
+        fontOptions.hidden = true;
         dialog.querySelectorAll(".ytcc-color-row").forEach((row) => {
           const colorInput = row.querySelector(".ytcc-mark-color");
           const alphaInput = row.querySelector(".ytcc-mark-alpha");
