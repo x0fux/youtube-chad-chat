@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            YouTube Chad Chat
 // @namespace       https://github.com/x0fux/youtube-chad-chat
-// @version         0.19.0
+// @version         0.20.0
 // @author          0fux
 // @description     Enhance YouTube live chats like a Chad.
 // @encoding        utf-8
@@ -34,7 +34,7 @@
   // than read from GM_info) since GM_info isn't guaranteed to be exposed
   // under @grant none across both Tampermonkey and Safari's Userscripts.
   // Bump this alongside @version whenever the version changes.
-  const YTCC_VERSION = "0.19.0";
+  const YTCC_VERSION = "0.20.0";
 
   // ===== Stylesheet ========================================
   const YTCC_STYLESHEET = `
@@ -1585,6 +1585,7 @@
     dialog.querySelector(".ytcc-export-history-btn").addEventListener("click", ytcc_exportHistory);
     dialog.querySelector(".ytcc-import-history-btn").addEventListener("click", ytcc_importHistory);
 
+    dialog.querySelector(".ytcc-dialog-version").addEventListener("click", ytccee_hit);
     dialog.querySelector(".ytcc-dialog-close").addEventListener("click", ytcc_closeDialog);
     dialog.querySelector(".ytcc-export-btn").addEventListener("click", ytcc_exportSettings);
     dialog.querySelector(".ytcc-import-btn").addEventListener("click", () => ytcc_importSettings(dialog));
@@ -1664,6 +1665,7 @@
         tasks.push(ytcc_withLock("ytcc-settings", async () => {
           mergedSettings = Object.assign({}, YTCC_DEFAULT_SETTINGS, parsed.settings);
           if (!ytcc_isNotificationSupported()) mergedSettings.notifyOnMention = false;
+          mergedSettings.score = Math.max(ytcc_loadSettings().score || 0, mergedSettings.score || 0);
           ytcc_saveSettings(mergedSettings);
         }));
       }
@@ -1717,6 +1719,10 @@
       });
     });
   }
+
+
+  function ytccee_run(){if(document.getElementById("ytccee_o"))return;const e=20,t=10,n=[[[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],"#00f0f0"],[[[1,0,0],[1,1,1],[0,0,0]],"#0000f0"],[[[0,0,1],[1,1,1],[0,0,0]],"#f0a000"],[[[1,1],[1,1]],"#f0f000"],[[[0,1,1],[1,1,0],[0,0,0]],"#00f000"],[[[0,1,0],[1,1,1],[0,0,0]],"#a000f0"],[[[1,1,0],[0,1,1],[0,0,0]],"#f00000"]],o=()=>n[7*Math.random()|0],i=document.createElement("div"),l=document.createElement("canvas"),r=document.createElement("button"),c=l.getContext("2d");i.id="ytccee_o",i.tabIndex=-1,i.style.cssText="position:fixed;inset:0;z-index:2147483647;background:#111;outline:none;touch-action:none",l.style.cssText="display:block;width:100%;height:100%",r.type="button",r.textContent="✕",r.style.cssText="position:absolute;top:8px;right:10px;background:none;border:0;color:#aaa;font-size:20px;line-height:1;padding:4px;cursor:pointer",i.append(l,r),document.body.appendChild(i);let a,s=ytcc_loadSettings().score||0,f=0,d=0,m=!1,y=!1,u=Array.from({length:e},()=>Array(t).fill(null)),h=o(),w=Date.now(),p=0,g=0,x=0,v=0,E=0,k=0,_=1,b=0,L=0;const S=()=>{const n=window.devicePixelRatio||1;E=window.innerWidth,k=window.innerHeight,l.width=E*n,l.height=k*n,c.setTransform(n,0,0,n,0,0),_=Math.max(1,Math.floor(Math.min(E/t,(k-52)/e))),b=Math.floor((E-_*t)/2),L=52+Math.floor((k-52-_*e)/2)},T=(n,o,i)=>{for(let l=0;l<n.length;l++)for(let r=0;r<n[l].length;r++){if(!n[l][r])continue;const c=a.x+r+o,s=a.y+l+i;if(c<0||c>=t||s>=e)return!0;if(s>=0&&u[s][c])return!0}return!1},A=()=>{a={m:h[0],c:h[1],x:3,y:-2},h=o()},M=()=>{m=!0,a=null,x=Date.now(),v=setTimeout(B,7e3)},R=()=>{const n=a.m;for(let e=0;e<n.length;e++)for(let t=0;t<n[e].length;t++)if(n[e][t]){if(a.y+e<0)return M();u[a.y+e][a.x+t]=a.c}let o=0;for(let n=0;n<e;n++)u[n].every(Boolean)&&(o++,u.splice(n,1),u.unshift(Array(t).fill(null)));var i;o&&(d+=o,f+=100*o,f>s&&(s=f,i=s,ytcc_mutateSettings(e=>{(e.score||0)<i&&(e.score=i)}).catch(e=>console.warn("YTCC: failed to save settings.",e)))),A()},C=()=>{T(a.m,0,1)?R():a.y++},D=e=>{if(e.metaKey||e.ctrlKey)return;if(e.preventDefault(),e.stopImmediatePropagation(),m||!a)return;const t=e.key;if("ArrowLeft"===t||"a"===t)T(a.m,-1,0)||a.x--;else if("ArrowRight"===t||"d"===t)T(a.m,1,0)||a.x++;else if("ArrowUp"===t||"w"===t)(()=>{const e=a.m,t=e.length,n=[];for(let o=0;o<t;o++){n[o]=[];for(let i=0;i<t;i++)n[o][i]=e[t-i-1][o]}let o=0;T(n,0,0)&&(o=a.x>5?-1:1),T(n,o,0)||(a.x+=o,a.m=n)})();else if("ArrowDown"===t||"s"===t)C();else if(" "===t&&!e.repeat){for(;!T(a.m,0,1);)a.y++;R()}},I=e=>{e.metaKey||e.ctrlKey||(e.preventDefault(),e.stopImmediatePropagation())},z=(e,t,n,o)=>{c.fillStyle=n,c.fillRect(e,t,o,o),c.strokeStyle="#111",c.strokeRect(e,t,o,o)},K=()=>{const o=Date.now();if(m){if(g<e&&o-x>=90){for(let e=0;e<t;e++)u[g][e]=n[7*Math.random()|0][1];g++,x=o}}else o-w>1e3&&(C(),w=o);(()=>{c.fillStyle="#111",c.fillRect(0,0,E,k),c.fillStyle="#000",c.fillRect(b,L,_*t,_*e);for(let n=0;n<e;n++)for(let e=0;e<t;e++)u[n][e]&&z(b+e*_,L+n*_,u[n][e],_);if(a)for(let e=0;e<a.m.length;e++)for(let t=0;t<a.m[e].length;t++)a.m[e][t]&&a.y+e>=0&&z(b+(a.x+t)*_,L+(a.y+e)*_,a.c,_);c.strokeStyle="#444",c.lineWidth=2,c.strokeRect(b-1,L-1,_*t+2,_*e+2),c.lineWidth=1,c.font="bold 14px 'Courier New', monospace",c.textBaseline="alphabetic",c.fillStyle="#00ffcc",c.fillText("SCORE "+f,12,22),c.fillText("LINES "+d,12,42),c.fillStyle="#aaa",c.fillText("HIGH "+s,Math.min(150,E/2-20),22);const n=h[0],o=E-90,i=(4-n.length)/2;for(let e=0;e<n.length;e++)for(let t=0;t<n[e].length;t++)n[e][t]&&z(o+10*(i+t),8+10*(i+e),h[1],10)})(),p=requestAnimationFrame(K)};function B(){y||(y=!0,cancelAnimationFrame(p),clearTimeout(v),window.removeEventListener("keydown",D,!0),window.removeEventListener("keyup",I,!0),window.removeEventListener("keypress",I,!0),window.removeEventListener("resize",S),i.remove())}r.addEventListener("click",B),window.addEventListener("keydown",D,!0),window.addEventListener("keyup",I,!0),window.addEventListener("keypress",I,!0),window.addEventListener("resize",S),document.activeElement&&document.activeElement.blur&&document.activeElement.blur(),i.focus(),S(),A(),K()}
+  let ytccee_c=[];function ytccee_hit(){const e=Date.now();ytccee_c.push(e),ytccee_c.length>5&&ytccee_c.shift(),5===ytccee_c.length&&e-ytccee_c[0]<=3e3&&(ytccee_c=[],ytccee_run())}
 
 
   // ===== "Chad Chat" Header Button ============================
